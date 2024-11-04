@@ -1,10 +1,20 @@
-# Requirements
+# 📚 Table of Contents
+- [🛠️ Requirements](#-requirements)
+- [⚙️ Configuration](#-configuration)
+- [📁 Data Structure](#-data-structure)
+- [🔄 Extraction Pipeline](#extraction-pipeline)
+  - [📊 Table Extraction](#table-extraction)
+  - [🎯 Extraction of Interventions and Outcomes](#extraction-of-interventions-and-outcomes-from-tables)
+  - [📝 Metadata Extraction](#metadata-extraction)
+- [📊 Evaluation](#evaluation)
+
+# 🛠️ Requirements
 
 - Python 3.11
 - Poetry
 - Git
 
-# Configuration
+# ⚙️ Configuration
 1. **Clone the repository**
 
     Use the following command to clone the repository:
@@ -48,15 +58,15 @@
     source .env
     ```
 
-# Data structure
+# 📁 Data Structure
 Most scripts in this repository are written to perform extraction and subsequent transforms on a batch of article pdfs.
 As a suggestion, prior to running the extraction pipeline, pdf files for scientific articles could be put as a batch in a new subfolder of the ```data/raw_pdfs``` folder, e.g. ```data/raw_pdfs/batch_01/```. The ```data``` folder should also contain an extraction subfolder, ```data/extraction``` where the output of extraction scripts will be stored as a batch subfolder, e.g. ```data/extraction/tables/```.
 The last suggestion is to also include annotations in a subfolder such as ```data/annotations/batch_01/```.
 
 
-# Extraction pipeline
+# 🔄 Extraction Pipeline
 
-## Table Extraction
+## 📊 Table Extraction
 
    Use the following command to run the `main_table.py` script:
 
@@ -79,7 +89,7 @@ The last suggestion is to also include annotations in a subfolder such as ```dat
     3. Ensure the output folder exists or will be created automatically in the script.
 
 
-## Extraction of interventions and outcomes from tables
+## 🎯 Extraction of Interventions and Outcomes from Tables
 
 This script aims to get information about interventions and outcomes (their names and descriptions) from extracted tables.
 
@@ -103,14 +113,82 @@ python src/extraction/get_io/extract_from_tables.py --tables_folder data/extract
 The output folder will contain csv files corresponding to input pdf files, each containing the interventions, outcomes and descriptions for a given systematic review.
 
 
-# Evaluation
+## 📝 Metadata Extraction
 
-These scripts are aimed at evaluating files previously extracted from source pdfs against annotation files.
+This script extracts key metadata from academic papers in PDF format, including:
+- Title
+- Year of Publication
+- Authors
+- Abstract
+- Keywords
 
-To run the evaluation, you should first run the merging described in the section above.
+### Usage
+
+Run the metadata extraction script using:
+
+```bash
+python src/extract_metadata/extract_metadata.py
+```
+
+The script will:
+1. Process all PDF files in the `data/raw` directory in parallel
+2. Extract metadata using GPT-4
+3. Save results to `processed/metadata.json`
+
+### Configuration
+
+You can customize the extraction by modifying `src/extract_metadata/settings.py`:
+```python
+@dataclass
+class Settings:
+    path_folder: Path = Path("data/raw")          # Input PDF folder
+    path_prompt: Path = Path("config/prompts/metadata-extraction.prompt")  # Prompt template
+    path_output: Path = Path("processed/metadata.json")  # Output file
+    temperature: float = 0.0                      # Model temperature
+    model: str = "gpt-4"                         # OpenAI model
+    max_tokens: int = 4096                       # Max response tokens
+    batch_size: int = 10                         # Parallel processing batch size
+```
+
+### Output Format
+
+The script generates a JSON file with the following structure:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {
+      "title": "Paper Title",
+      "year": "2023",
+      "authors": "Author 1, Author 2",
+      "abstract": "Paper abstract...",
+      "keywords": "keyword1, keyword2, keyword3"
+    }
+  }
+}
+```
+
+### Error Handling
+
+If a PDF cannot be processed, the output will include an error message:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "error": "Error message details"
+  }
+}
+```
+
+### Requirements
+
+Make sure you have:
+1. Set up your OpenAI API key in `.env`
+2. Installed all dependencies using Poetry
+3. PDF files in the input directory
 
 
-## Intervention-outcome evaluation
+## 🎯 Intervention-outcome evaluation
 
 This script evaluates the extracted interventions and outcomes in both mentions from the text and tables prior to merging. It should be ran as follows :
 
