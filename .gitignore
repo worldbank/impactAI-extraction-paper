@@ -120,3 +120,15 @@ token.*
 tokens.*
 token/
 tokens/
+
+
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb
+*/.ipynb_checkpoints/*
+*/*.ipynb
+
+#.DS_Store
+.DS_Store
+*/.DS_Store
