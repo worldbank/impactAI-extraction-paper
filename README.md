@@ -1,6 +1,6 @@
 # Requirements
 
-- Python 3.9
+- Python 3.11
 - Poetry
 - Git
 
@@ -9,7 +9,7 @@
 
     Use the following command to clone the repository:
     ```bash
-    git clone <repository-url>
+    git clone git@github.com:worldbank/impactAI-extraction-paper.git
     ```
 
 2. **Install poetry**
