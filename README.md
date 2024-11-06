@@ -250,6 +250,41 @@ If classification fails, the output will include an error message:
 }
 ```
 
+### Evaluation
+
+To evaluate the RCT classification, run the following command:
+
+```bash
+python src/rct_clf/evaluate.py
+```
+
+The script will:
+1. Load predictions from `data/processed/metadata_rct_classified.json`
+2. Load ground truth from `data/raw/RCT_GT.csv`
+3. Compute metrics
+4. Save results to `data/processed/ZSL_two_steps_metrics.json`
+
+You can customize the evaluation by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class EvaluationParams:
+    path_preds: Path = Path("data/processed/metadata_rct_classified.json")
+    path_true: Path = Path("data/raw/RCT_GT.csv")
+    path_output: Path = Path("data/processed/ZSL_two_steps_metrics.json")
+```
+
+### Output Format
+
+The script generates a JSON file with the following structure:
+```json
+{
+    "accuracy": 92.72727272727272,
+    "precision": 100.0,
+    "recall": 89.74358974358975,
+    "f1": 94.5945945945946
+}
+```
+
 
 ## 🎯 Intervention-outcome evaluation
 
