@@ -10,7 +10,8 @@ from tqdm.asyncio import tqdm
 from dotenv import load_dotenv
 
 from settings import Settings
-from utils import load_prompt_async, process_pdf_async
+from utils import process_pdf_async
+from src.utils.file_management import load_prompt_async
 
 load_dotenv()
 
@@ -19,6 +20,7 @@ async def process_files_async(
     files: List[Path],
     client: AsyncOpenAI,
     prompt_template: str,
+    system_content: str,
     settings: Settings,
 ) -> Dict[str, dict]:
     """Process multiple PDF files asynchronously.
@@ -42,6 +44,7 @@ async def process_files_async(
                 filepath=file,
                 client=client,
                 prompt_template=prompt_template,
+                system_content=system_content,
                 model=settings.model,
                 max_tokens=settings.max_tokens,
                 temperature=settings.temperature,
@@ -79,6 +82,7 @@ async def main_async():
         files=pdf_files,
         client=client,
         prompt_template=prompt_template,
+        system_content=settings.system_content,
         settings=settings,
     )
 
