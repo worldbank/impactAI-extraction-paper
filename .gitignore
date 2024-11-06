@@ -81,6 +81,9 @@
 # Julia
 !/**/*.jl
 
+# Prompt
+!/**/*.prompt
+
 #Files to create custom layout and functionality
 # in dashboards, markdown notebooks, bookdown etc.
 !/**/*.css
