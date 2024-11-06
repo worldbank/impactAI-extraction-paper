@@ -1,40 +1,44 @@
+import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Dict
+import os
+import aiofiles
 
-from openai import OpenAI
-from tqdm import tqdm
+from openai import AsyncOpenAI
+from tqdm.asyncio import tqdm
 from dotenv import load_dotenv
 
 from settings import Settings
-from utils import load_prompt, process_pdf
-import os
+from utils import load_prompt_async, process_pdf_async
 
 load_dotenv()
 
 
-def process_files_parallel(
-    files: List[Path], client: OpenAI, prompt_template: str, settings: Settings
+async def process_files_async(
+    files: List[Path],
+    client: AsyncOpenAI,
+    prompt_template: str,
+    settings: Settings,
 ) -> Dict[str, dict]:
-    """Process multiple PDF files in parallel.
+    """Process multiple PDF files asynchronously.
 
     Args:
         - files: List of paths to the PDF files
-        - client: OpenAI client
+        - client: AsyncOpenAI client
         - prompt_template: Prompt template
         - settings: Settings
 
     Returns:
         - Dict[str, dict]: Dictionary of results with file paths as string keys
     """
+    semaphore = asyncio.Semaphore(settings.batch_size)
     results = {}
 
-    with ThreadPoolExecutor(max_workers=settings.batch_size) as executor:
-        # Create a list of future tasks
-        futures = {
-            str(file): executor.submit(  # Convert Path to string for JSON serialization
-                process_pdf,
+    async def process_single_file(file: Path):
+        """Process a single file with semaphore control."""
+        async with semaphore:
+            result = await process_pdf_async(
                 filepath=file,
                 client=client,
                 prompt_template=prompt_template,
@@ -42,21 +46,27 @@ def process_files_parallel(
                 max_tokens=settings.max_tokens,
                 temperature=settings.temperature,
             )
-            for file in files
-        }
+            return str(file), result
 
-        # Process results as they complete with progress bar
-        for key, future in tqdm(futures.items(), desc="Processing PDFs"):
-            results[key] = future.result()
+    # Create and gather tasks
+    tasks = [process_single_file(file) for file in files]
+
+    # Process with progress bar
+    for coro in tqdm(
+        asyncio.as_completed(tasks), total=len(tasks), desc="Processing PDFs"
+    ):
+        file_path, result = await coro
+        results[file_path] = result
 
     return results
 
 
-def main():
+async def main_async():
+    """Main async function."""
     settings = Settings()
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    prompt_template = load_prompt(settings.path_prompt)
+    prompt_template = await load_prompt_async(settings.path_prompt)
 
     pdf_files = list(settings.path_folder.glob("*.pdf"))
     pdf_files.sort()
@@ -65,7 +75,7 @@ def main():
         print(f"No PDF files found in {settings.path_folder}")
         return
 
-    results = process_files_parallel(
+    results = await process_files_async(
         files=pdf_files,
         client=client,
         prompt_template=prompt_template,
@@ -75,10 +85,15 @@ def main():
     output_path = settings.path_output
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=4)
+    async with aiofiles.open(output_path, "w") as f:
+        await f.write(json.dumps(results, indent=4, ensure_ascii=False))
 
     print(f"Results saved to {output_path}")
+
+
+def main():
+    """Entry point that runs the async main function."""
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":

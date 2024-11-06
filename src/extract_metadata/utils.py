@@ -2,13 +2,15 @@ import json
 import re
 from pathlib import Path
 from typing import Dict, Optional
+import aiofiles
 
 import pymupdf4llm
 from jinja2 import Template
-from openai import OpenAI
+from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
-def load_prompt(path_prompt: Path) -> str:
+async def load_prompt_async(path_prompt: Path) -> str:
     """Load prompt template from file.
 
     Args:
@@ -17,8 +19,8 @@ def load_prompt(path_prompt: Path) -> str:
     Returns:
         - str: Prompt template
     """
-    with open(path_prompt, "r") as f:
-        return f.read()
+    async with aiofiles.open(path_prompt, "r") as f:
+        return await f.read()
 
 
 def extract_json_from_response(response_text: str) -> Optional[Dict]:
@@ -41,8 +43,9 @@ def extract_json_from_response(response_text: str) -> Optional[Dict]:
     return None
 
 
-def generate_metadata(
-    client: OpenAI,
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def generate_metadata_async(
+    client: AsyncOpenAI,
     md_text: str,
     prompt_template: str,
     model: str,
@@ -65,7 +68,7 @@ def generate_metadata(
     template = Template(prompt_template)
     rendered_prompt = template.render(markdown_text=md_text)
 
-    response = client.chat.completions.create(
+    response = await client.chat.completions.create(
         model=model,
         messages=[
             {
@@ -82,9 +85,9 @@ def generate_metadata(
     return result if result else {"error": "Failed to parse JSON response"}
 
 
-def process_pdf(
+async def process_pdf_async(
     filepath: Path,
-    client: OpenAI,
+    client: AsyncOpenAI,
     prompt_template: str,
     model: str,
     max_tokens: int,
@@ -107,14 +110,15 @@ def process_pdf(
         # Try different page ranges until we get valid text
 
         md_text = None
-        # error_messages = []
+        page_ranges = [[0, 1, 2], [0], [1], [2]]
+        error_messages = []
 
-        md_text = pymupdf4llm.to_markdown(str(filepath), pages=[0, 1, 2])
-        """
         for pages in page_ranges:
             try:
                 md_text = pymupdf4llm.to_markdown(str(filepath), pages=pages)
-                if md_text and len(md_text.strip()) > 100:  # Check if we got meaningful text
+                if (
+                    md_text and len(md_text.strip()) > 100
+                ):  # Check if we got meaningful text
                     break
             except Exception as e:
                 error_messages.append(f"Failed on pages {pages}: {str(e)}")
@@ -122,11 +126,11 @@ def process_pdf(
         if not md_text or len(md_text.strip()) <= 100:
             return {
                 "filename": filepath.name,
-                "error": f"Could not extract meaningful text from any page. Errors: {'; '.join(error_messages)}"
+                "error": f"Could not extract meaningful text from any page. Errors: {'; '.join(error_messages)}",
             }
-        """
+
         # Generate metadata
-        metadata = generate_metadata(
+        metadata = await generate_metadata_async(
             client=client,
             md_text=md_text,
             prompt_template=prompt_template,
