@@ -27,9 +27,9 @@ def extract_json_from_response(response_text: str) -> Optional[Dict]:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-async def generate_metadata_async(
+async def generate_openai_response_async(
     client: AsyncOpenAI,
-    md_text: str,
+    render_dict: Dict,
     system_content: str,
     prompt_template: str,
     model: str,
@@ -40,7 +40,7 @@ async def generate_metadata_async(
 
     Args:
         - client: OpenAI client
-        - md_text: Markdown text
+        - render_dict: Dictionary to render
         - prompt_template: Prompt template
         - system_content: System content
         - model: Model to use
@@ -51,7 +51,17 @@ async def generate_metadata_async(
         - Dict: JSON object
     """
     template = Template(prompt_template)
-    rendered_prompt = template.render(markdown_text=md_text)
+
+    if render_dict.get("keywords") == "Not Available":
+        keywords = None
+    else:
+        keywords = render_dict.get("keywords")
+
+    rendered_prompt = template.render(
+        abstract=render_dict.get("abstract"),
+        title=render_dict.get("title"),
+        keywords=keywords,
+    )
 
     response = await client.chat.completions.create(
         model=model,
