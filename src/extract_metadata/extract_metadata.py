@@ -1,9 +1,8 @@
 import asyncio
-import json
 from pathlib import Path
 from typing import List, Dict
 import os
-import aiofiles
+import logging
 
 from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
@@ -11,9 +10,12 @@ from dotenv import load_dotenv
 
 from settings import Settings
 from utils import process_pdf_async
-from src.utils.file_management import load_prompt_async
+from src.utils.file_management import load_prompt_async, save_json_async
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 async def process_files_async(
@@ -75,7 +77,7 @@ async def main_async():
     pdf_files.sort()
 
     if not pdf_files:
-        print(f"No PDF files found in {settings.path_folder}")
+        logging.warning(f"No PDF files found in {settings.path_folder}")
         return
 
     results = await process_files_async(
@@ -89,10 +91,7 @@ async def main_async():
     output_path = settings.path_output
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    async with aiofiles.open(output_path, "w") as f:
-        await f.write(json.dumps(results, indent=4, ensure_ascii=False))
-
-    print(f"Results saved to {output_path}")
+    await save_json_async(output_path, results, logger)
 
 
 def main():

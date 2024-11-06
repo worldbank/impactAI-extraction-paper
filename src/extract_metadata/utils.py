@@ -3,7 +3,7 @@ from typing import Dict
 
 import pymupdf4llm
 from openai import AsyncOpenAI
-from src.utils.openai_response import generate_metadata_async
+from src.utils.openai_response import generate_openai_response_async
 
 
 async def process_pdf_async(
@@ -53,9 +53,10 @@ async def process_pdf_async(
             }
 
         # Generate metadata
-        metadata = await generate_metadata_async(
+        render_dict = {"markdown_text": md_text}
+        metadata = await generate_openai_response_async(
             client=client,
-            md_text=md_text,
+            render_dict=render_dict,
             prompt_template=prompt_template,
             system_content=system_content,
             model=model,
