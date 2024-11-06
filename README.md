@@ -187,6 +187,69 @@ Make sure you have:
 2. Installed all dependencies using Poetry
 3. PDF files in the input directory
 
+## 🤖 RCT Classification with Zero-Shot Learning
+
+This script uses GPT-4o to classify research papers as Randomized Controlled Trials (RCTs) or not using zero-shot learning.
+
+### Usage
+
+After extracting metadata, run the classification script:
+
+```bash
+python src/rct_clf/zsl_classify.py
+```
+
+The script will:
+1. Load metadata from `data/processed/metadata.json`
+2. Process each paper using GPT-4o for RCT classification
+3. Save results to `data/processed/metadata_rct_classified.json`
+
+### Configuration
+
+Customize the classification by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class ZSLSettings:
+    path_prompt: Path = Path("config/prompts/RCT_ZSL.prompt")
+    path_input: Path = Path("data/processed/metadata.json")
+    path_output: Path = Path("data/processed/metadata_rct_classified.json")
+    system_content: str = "You are an expert in economic research."
+    temperature: float = 1.0
+    model: str = "gpt-4o"
+    max_tokens: int = 1024
+    batch_size: int = 10
+```
+
+### Output Format
+
+The script generates a JSON file that includes the original metadata plus RCT classification:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {
+      "title": "Paper Title",
+      "abstract": "Paper abstract...",
+      "keywords": "keyword1, keyword2"
+    },
+    "rct": "True"  // or "False"
+  }
+}
+```
+
+### Error Handling
+
+If classification fails, the output will include an error message:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {...},
+    "error": "Error message details"
+  }
+}
+```
+
 
 ## 🎯 Intervention-outcome evaluation
 
