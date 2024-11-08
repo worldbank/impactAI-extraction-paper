@@ -72,7 +72,6 @@ async def main_async():
     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     prompt_template = await load_prompt_async(settings.path_prompt, logger)
-    print(prompt_template)
 
     pdf_files = list(settings.path_folder.glob("*.pdf"))
 
