@@ -81,6 +81,9 @@
 # Julia
 !/**/*.jl
 
+# Prompt
+!/**/*.prompt
+
 #Files to create custom layout and functionality
 # in dashboards, markdown notebooks, bookdown etc.
 !/**/*.css
@@ -120,3 +123,15 @@ token.*
 tokens.*
 token/
 tokens/
+
+
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb
+*/.ipynb_checkpoints/*
+*/*.ipynb
+
+#.DS_Store
+.DS_Store
+*/.DS_Store

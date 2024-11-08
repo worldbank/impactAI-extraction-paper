@@ -1,0 +1,35 @@
+Extract the following metadata from the markdown text below. For each field, follow these specific guidelines:
+
+- **Title**: The main heading or title of the document. Usually appears at the top or is marked with # or ##
+- **Year of Publication**: Look for a 4-digit year between 1900-2024, often found near author names or at the top
+- **Authors**: Names of individuals who wrote the document, typically found near the title or in a byline
+- **Abstract**: A brief summary of the content, usually appearing at the beginning of the document
+- **Keywords**: Key terms or phrases listed explicitly
+
+If any specific field is not clearly indicated in the text:
+- For abstract: Use the first two main paragraphs of the text
+- For other fields: Mark as 'Not available'
+
+Below is the markdown text to extract metadata from:
+
+```markdown
+{{ markdown_text }}
+```
+
+Expected JSON output format:
+
+```json
+{
+  "title": "{{ title | default('Not available') }}",
+  "year": "{{ year | default('Not available') }}",
+  "authors": "{{ authors | default('Not available') }}",
+  "abstract": "{{ abstract | default('First two paragraphs') }}",
+  "keywords": "{{ keywords | default('Not available') }}"
+}
+```
+
+Notes:
+- Author names should be separated by commas if multiple
+- Keywords should be lowercase and comma-separated
+- Years should be validated to be within a reasonable range (1900-2024)
+- First paragraphs should exclude any metadata blocks or front matter
