@@ -250,6 +250,71 @@ If classification fails, the output will include an error message:
 }
 ```
 
+## 🤖 MetaData extraction with RCT Classification with Zero-Shot Learning
+
+This script uses GPT-4o to extract metadata and classify research papers as Randomized Controlled Trials (RCTs) or not using zero-shot learning.
+
+### Usage
+
+Run the metadata extraction and RCT classification script using:
+
+```bash
+python src/rct_clf/zsl_from_pdf.py
+```
+
+The script will:
+1. Process all PDF files in the `data/raw` directory in parallel
+2. Extract metadata using GPT-4o
+3. Save results to `metadata_pdf_rct_classified.json`
+
+### Configuration
+
+You can customize the extraction by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class PDFZSLSettings:
+    path_folder: Path = Path("data/raw") # Input PDF folder
+    path_prompt: Path = Path("config/prompts/RCT_metadata-extraction_ZSL.prompt")  # Prompt template
+    path_output: Path = Path("data/processed/metadata_pdf_rct_classified.json") # Output file
+    system_content: str = "You are an expert that extracts metadata and classify whether the study is Randomized Controlled Trial (RCT) or not from academic papers." # system message
+    temperature: float = 0.0 # Model temperature
+    model: str = "gpt-4o" # OpenAI model
+    max_tokens: int = 1024  # Max response tokens
+    batch_size: int = 10   # Parallel processing batch size
+```
+
+### Output Format
+
+The script generates a JSON file with the following structure:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {
+      "title": "Paper Title",
+      "year": "2023",
+      "authors": "Author 1, Author 2",
+      "abstract": "Paper abstract...",
+      "keywords": "keyword1, keyword2, keyword3"
+    },
+    "rct": "True", // or "False",
+    "explanation": "text"
+  }
+}
+```
+
+### Error Handling
+
+If a PDF cannot be processed, the output will include an error message:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "error": "Error message details"
+  }
+}
+```
+
 ### Evaluation
 
 To evaluate the RCT classification, run the following command:
@@ -284,6 +349,10 @@ The script generates a JSON file with the following structure:
     "f1": 94.5945945945946
 }
 ```
+
+
+
+
 
 
 ## 🎯 Intervention-outcome evaluation
