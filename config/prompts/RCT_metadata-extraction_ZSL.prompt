@@ -1,0 +1,43 @@
+Analyze the following text and extract the metadata fields given below, if available. Use your best judgment to identify these fields, even if they are not explicitly labeled.
+
+- **Title**: The main heading or title of the document. Usually appears at the top or is marked with # or ##
+- **Year of Publication**: Look for a 4-digit year between 1900-2024, often found near author names or at the top
+- **Authors**: Names of individuals who wrote the document, typically found near the title or in a byline
+- **Abstract**: A brief summary of the content, usually appearing at the beginning of the document
+- **Keywords**: Key terms or phrases listed explicitly
+
+If any specific field is not clearly indicated in the text:
+- For abstract: Use the first two main paragraphs of the text
+- For other fields: Mark as 'Not available'
+
+Next, based on the extracted **Title** and **Abstract**, along with the context of the text, classify whether the study is a **Randomized Controlled Trial (RCT)** or not.
+- Provide the classification as either "True" or "False".
+- Include a **brief explanation** for the classification to justify your decision.
+
+### Below is the markdown text:
+
+```markdown
+{{ markdown_text }}
+```
+
+
+Provide the output in **valid JSON format** like the following:
+
+```json
+{
+  "title": "{{ title | default('Not available') }}",
+  "year": "{{ year | default('Not available') }}",
+  "authors": "{{ authors | default('Not available') }}",
+  "abstract": "{{ abstract | default('First two paragraphs') }}",
+  "keywords": "{{ keywords | default('Not available') }}"
+  "rct": "True"/"False",
+  "explanation": "your explanation of the choice"
+}
+```
+
+Notes:
+- Author names should be separated by commas if multiple
+- Keywords should be lowercase and comma-separated
+- Years should be validated to be within a reasonable range (1900-2024)
+- First paragraphs should exclude any metadata blocks or front matter
+- For rct classification, use your best judgement to classify RCT studies using abstract and given text.

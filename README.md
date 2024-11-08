@@ -187,6 +187,173 @@ Make sure you have:
 2. Installed all dependencies using Poetry
 3. PDF files in the input directory
 
+## 🤖 RCT Classification with Zero-Shot Learning
+
+This script uses GPT-4o to classify research papers as Randomized Controlled Trials (RCTs) or not using zero-shot learning.
+
+### Usage
+
+After extracting metadata, run the classification script:
+
+```bash
+python src/rct_clf/zsl_classify.py
+```
+
+The script will:
+1. Load metadata from `data/processed/metadata.json`
+2. Process each paper using GPT-4o for RCT classification
+3. Save results to `data/processed/metadata_rct_classified.json`
+
+### Configuration
+
+Customize the classification by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class ZSLSettings:
+    path_prompt: Path = Path("config/prompts/RCT_ZSL.prompt")
+    path_input: Path = Path("data/processed/metadata.json")
+    path_output: Path = Path("data/processed/metadata_rct_classified.json")
+    system_content: str = "You are an expert in economic research."
+    temperature: float = 1.0
+    model: str = "gpt-4o"
+    max_tokens: int = 1024
+    batch_size: int = 10
+```
+
+### Output Format
+
+The script generates a JSON file that includes the original metadata plus RCT classification:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {
+      "title": "Paper Title",
+      "abstract": "Paper abstract...",
+      "keywords": "keyword1, keyword2"
+    },
+    "rct": "True"  // or "False"
+  }
+}
+```
+
+### Error Handling
+
+If classification fails, the output will include an error message:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {...},
+    "error": "Error message details"
+  }
+}
+```
+
+## 🤖 MetaData extraction with RCT Classification with Zero-Shot Learning
+
+This script uses GPT-4o to extract metadata and classify research papers as Randomized Controlled Trials (RCTs) or not using zero-shot learning.
+
+### Usage
+
+Run the metadata extraction and RCT classification script using:
+
+```bash
+python src/rct_clf/zsl_from_pdf.py
+```
+
+The script will:
+1. Process all PDF files in the `data/raw` directory in parallel
+2. Extract metadata using GPT-4o
+3. Save results to `metadata_pdf_rct_classified.json`
+
+### Configuration
+
+You can customize the extraction by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class PDFZSLSettings:
+    path_folder: Path = Path("data/raw") # Input PDF folder
+    path_prompt: Path = Path("config/prompts/RCT_metadata-extraction_ZSL.prompt")  # Prompt template
+    path_output: Path = Path("data/processed/metadata_pdf_rct_classified.json") # Output file
+    system_content: str = "You are an expert that extracts metadata and classify whether the study is Randomized Controlled Trial (RCT) or not from academic papers." # system message
+    temperature: float = 0.0 # Model temperature
+    model: str = "gpt-4o" # OpenAI model
+    max_tokens: int = 1024  # Max response tokens
+    batch_size: int = 10   # Parallel processing batch size
+```
+
+### Output Format
+
+The script generates a JSON file with the following structure:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "metadata": {
+      "title": "Paper Title",
+      "year": "2023",
+      "authors": "Author 1, Author 2",
+      "abstract": "Paper abstract...",
+      "keywords": "keyword1, keyword2, keyword3"
+    },
+    "rct": "True", // or "False",
+    "explanation": "text"
+  }
+}
+```
+
+### Error Handling
+
+If a PDF cannot be processed, the output will include an error message:
+```json
+{
+  "path/to/paper.pdf": {
+    "filename": "paper.pdf",
+    "error": "Error message details"
+  }
+}
+```
+
+### Evaluation
+
+To evaluate the RCT classification, run the following command:
+
+```bash
+python src/rct_clf/evaluate.py
+```
+
+The script will:
+1. Load predictions from `data/processed/metadata_rct_classified.json`
+2. Load ground truth from `data/raw/RCT_GT.csv`
+3. Compute metrics
+4. Save results to `data/processed/ZSL_two_steps_metrics.json`
+
+You can customize the evaluation by modifying `src/rct_clf/settings.py`:
+```python
+@dataclass
+class EvaluationParams:
+    path_preds: Path = Path("data/processed/metadata_rct_classified.json")
+    path_true: Path = Path("data/raw/RCT_GT.csv")
+    path_output: Path = Path("data/processed/ZSL_two_steps_metrics.json")
+```
+
+### Output Format
+
+The script generates a JSON file with the following structure:
+```json
+{
+    "accuracy": 92.72727272727272,
+    "precision": 100.0,
+    "recall": 89.74358974358975,
+    "f1": 94.5945945945946
+}
+```
+
+
+
+
+
 
 ## 🎯 Intervention-outcome evaluation
 
