@@ -8,8 +8,8 @@ from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
 from dotenv import load_dotenv
 
-from settings import Settings
-from utils import process_pdf_async
+from settings import PDFZSLSettings
+from src.extract_metadata.utils import process_pdf_async
 from src.utils.file_management import load_prompt_async, save_json_async
 
 load_dotenv()
@@ -23,7 +23,7 @@ async def process_files_async(
     client: AsyncOpenAI,
     prompt_template: str,
     system_content: str,
-    settings: Settings,
+    settings: PDFZSLSettings,
 ) -> Dict[str, dict]:
     """Process multiple PDF files asynchronously.
 
@@ -51,6 +51,24 @@ async def process_files_async(
                 max_tokens=settings.max_tokens,
                 temperature=settings.temperature,
             )
+
+            # Get metadata and handle missing metadata by defaulting to an empty dictionary
+            metadata = result.get("metadata", {})
+
+            # Use dictionary unpacking to simplify the extraction of fields
+            rct = metadata.get("rct", "")
+            explanation = metadata.get("explanation", "")
+
+            # Create the reshaped result
+            result = {
+                "filename": file.name,
+                "metadata": {
+                    key: metadata.get(key, "")
+                    for key in ["title", "year", "authors", "abstract", "keywords"]
+                },
+                "rct": rct,
+                "explanation": explanation,
+            }
             return str(file), result
 
     # Create and gather tasks
@@ -68,11 +86,10 @@ async def process_files_async(
 
 async def main_async():
     """Main async function."""
-    settings = Settings()
+    settings = PDFZSLSettings()
     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     prompt_template = await load_prompt_async(settings.path_prompt, logger)
-    print(prompt_template)
 
     pdf_files = list(settings.path_folder.glob("*.pdf"))
 

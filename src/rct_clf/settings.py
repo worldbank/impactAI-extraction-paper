@@ -6,9 +6,21 @@ from pathlib import Path
 class ZSLSettings:
     path_prompt: Path = Path("config/prompts/RCT_ZSL.prompt")
     path_input: Path = Path("data/processed/metadata.json")
-    path_output: Path = Path("data/processed/matadata_rct_classified.json")
-    system_content: str = "You are a an expert in economic research and in classifiying studies as Randomized Controlled Trial (RCT) or not."
+    path_output: Path = Path("data/processed/metadata_rct_classified.json")
+    system_content: str = "You are an expert in economic research and in classifiying studies as Randomized Controlled Trial (RCT) or not."
     temperature: float = 1.0
+    model: str = "gpt-4o"
+    max_tokens: int = 1024
+    batch_size: int = 10
+
+
+@dataclass
+class PDFZSLSettings:
+    path_folder: Path = Path("data/raw")
+    path_prompt: Path = Path("config/prompts/RCT_metadata-extraction_ZSL.prompt")
+    path_output: Path = Path("data/processed/metadata_pdf_rct_classified.json")
+    system_content: str = "You are an expert that extracts metadata and classify whether the study is Randomized Controlled Trial (RCT) or not from academic papers."
+    temperature: float = 0.0
     model: str = "gpt-4o"
     max_tokens: int = 1024
     batch_size: int = 10
@@ -30,6 +42,6 @@ class TrainingParams:
 
 @dataclass
 class EvaluationParams:
-    path_preds: Path = Path("data/processed/matadata_rct_classified.json")
+    path_preds: Path = Path("data/processed/metadata_pdf_rct_classified.json")
     path_true: Path = Path("data/raw/RCT_GT.csv")
-    path_output: Path = Path("data/processed/ZSL_two_steps_metrics.json")
+    path_output: Path = Path("data/processed/ZSL_one_steps_metrics.json")

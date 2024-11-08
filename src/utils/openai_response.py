@@ -61,6 +61,7 @@ async def generate_openai_response_async(
         abstract=render_dict.get("abstract"),
         title=render_dict.get("title"),
         keywords=keywords,
+        markdown_text=render_dict.get("markdown_text"),
     )
 
     response = await client.chat.completions.create(

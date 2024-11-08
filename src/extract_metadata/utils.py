@@ -54,6 +54,7 @@ async def process_pdf_async(
 
         # Generate metadata
         render_dict = {"markdown_text": md_text}
+
         metadata = await generate_openai_response_async(
             client=client,
             render_dict=render_dict,
