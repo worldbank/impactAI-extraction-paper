@@ -1,0 +1,44 @@
+I need help improving a prompt for extracting structured markdown from PDF text.
+
+CURRENT PROMPT:
+```
+{{ original_prompt }}
+```
+
+Here are {{ examples|length }} example pairs showing the raw text and expected vs. current output:
+
+{% for example in examples %}
+EXAMPLE {{ loop.index }}:
+
+RAW TEXT:
+```
+{{ example.pdf_text }}
+```
+
+EXPECTED OUTPUT:
+```markdown
+{{ example.gt }}
+```
+
+CURRENT OUTPUT:
+```markdown
+{{ example.pred }}
+```
+
+{% endfor %}
+
+Please analyze these examples and:
+1. Identify key differences between expected and current outputs
+2. Suggest specific improvements to the prompt
+3. Provide a complete revised version of the prompt
+4. In the new revised version include table formatting example:
+    a. Select one TABLE from EXPECTED OUTPUT
+    b. Select the TABLE_TEXT part in RAW TEXT associated to TABLE
+    c. Provide example with **RAW TEXT** is TABLE_TEXT and **EXPECTED OUTPUT** is TABLE
+5. Explain how your changes will improve the extraction
+
+Focus on:
+- Maintaining document structure (headings, tables, lists)
+- Preserving text content accurately
+- Handling special cases shown in the examples
+- Ensuring consistent output formatting
