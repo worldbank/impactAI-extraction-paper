@@ -3,6 +3,7 @@
 - [⚙️ Configuration](#-configuration)
 - [📁 Data Structure](#-data-structure)
 - [🔄 Extraction Pipeline](#extraction-pipeline)
+  - [🔄 PDF to Markdown](#pdf-to-markdown)
   - [📊 Table Extraction](#table-extraction)
   - [🎯 Extraction of Interventions and Outcomes](#extraction-of-interventions-and-outcomes-from-tables)
   - [📝 Metadata Extraction](#metadata-extraction)
@@ -65,6 +66,110 @@ The last suggestion is to also include annotations in a subfolder such as ```dat
 
 
 # 🔄 Extraction Pipeline
+
+## 📄 PDF to Markdown
+
+The `parse_pdf.py` script implements a robust PDF processing pipeline that converts academic papers into clean markdown format. This pipeline has been extensively tested against various approaches (Zerox, OCR on PDF images, PyMuPDF with and without LLM) and has proven to be the most effective solution.
+
+### Usage
+
+```bash
+# Basic usage
+python src/parse/parse_pdf.py
+
+# Process with verbose logging
+python src/parse/parse_pdf.py --verbose
+
+# Process specific number of samples
+python src/parse/parse_pdf.py --n_samples 5
+```
+
+### Configuration
+
+Configure the pipeline in `src/parse/settings.py`:
+
+```python
+model_text = "gpt-4o-mini"  # For text processing
+model_tables = "gpt-4o"     # For table processing
+```
+
+### Pipeline Steps
+
+1. **Document Loading**
+   - Scans input directory for PDF files
+   - Supports batch processing with configurable concurrency limits
+   - Handles nested directory structures
+
+2. **Docling Ingestion**
+   - Converts PDFs using Docling's document processing pipeline
+   - Extracts text, tables, and structural elements
+   - Generates high-quality page images for table processing
+
+3. **Content Separation**
+   - Divides content into two streams:
+     - Main text content
+     - Tables and their associated captions
+   - Preserves document structure and relationships
+
+4. **LLM Post-processing**
+   - Text Processing:
+     - Uses GPT-4-mini for optimal performance/cost ratio
+     - Cleans formatting, removes noise (headers, footers, page numbers)
+     - Preserves academic structure and references
+   - Table Processing:
+     - Uses GPT-4 with vision capabilities
+     - Verifies and corrects table structure
+     - Ensures accuracy of numerical data
+     - Preserves notes and statistical indicators
+
+5. **Output Generation**
+   - Generates clean markdown files
+   - Creates separate files for main text and tables
+   - Saves processing metrics for analysis
+
+### Best Practices
+
+Our testing revealed that the optimal configuration uses:
+- `gpt-4o-mini` for text post-processing
+- `gpt-4o` for table post-processing
+
+This combination provides the best balance of accuracy and cost-effectiveness.
+
+### Comparison with Other Approaches
+
+We evaluated several alternative approaches:
+- Zerox PDF processing [here](https://github.com/getomni-ai/zerox/)
+- OCR on PDF images (from scratch)
+- PyMuPDF (with and without LLM)
+- Adding Yolov10 to extract tables from PDF images
+
+Docling + LLM post-processing consistently outperformed these methods in terms of:
+- Text extraction accuracy
+- Table structure preservation
+- Document formatting retention
+- Processing speed
+
+### Known Limitations and Future Improvements
+
+Current limitations that will be addressed in future iterations:
+
+1. **Document Completeness**
+   - Occasional missing pages in Docling output
+   - Solution: Implement page verification and recovery system
+
+2. **Table Accuracy**
+   - Some instances of missing rows in complex tables
+   - Improvement planned: Enhanced table structure validation
+
+3. **Numerical Sequences**
+   - Reduced accuracy with very long number sequences
+   - Future enhancement: Work step by step on the rows with prompt
+
+4. **Processing Speed**
+   - Current sequential processing of tables
+   - Planned: Improved parallelization for table processing
+
+Despite these limitations, the current pipeline produces high-quality results suitable for most academic papers.
 
 ## 📊 Table Extraction
 
