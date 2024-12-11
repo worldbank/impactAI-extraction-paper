@@ -3,7 +3,7 @@ from pathlib import Path
 
 import aiofiles
 import json
-from typing import Dict
+from typing import Dict, List
 
 
 async def load_prompt_async(path_prompt: Path, logger: logging.Logger) -> str:
@@ -18,6 +18,15 @@ async def load_prompt_async(path_prompt: Path, logger: logging.Logger) -> str:
     async with aiofiles.open(path_prompt, "r") as f:
         logger.info(f"Loading prompt from {path_prompt}")
         return await f.read()
+
+
+async def load_examples(path_examples: Path, logger: logging.Logger) -> List[Dict]:
+    """Load examples from file."""
+    examples = []
+    for path_example in path_examples.glob("*.json"):
+        examples.append(await load_json_async(path_example, logger))
+
+    return examples
 
 
 async def load_json_async(path_json: Path, logger: logging.Logger) -> Dict:
