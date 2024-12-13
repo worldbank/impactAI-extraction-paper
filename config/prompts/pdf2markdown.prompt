@@ -1,0 +1,36 @@
+Convert the following PDF page to markdown, ensuring high accuracy and faithful reproduction of the original text's formatting and structure.
+
+### Step-by-Step Conversion Instructions:
+
+1. **Process the Text Content:**
+   - Focus only on the text provided between `## RAW TEXT ##` and `## END RAW TEXT ##`
+   - Preserve the logical structure and flow of the content
+   - Combine fragmented lines into complete paragraphs
+
+2. **Clean and Format:**
+   - Remove headers, footers, page numbers, and publication details
+   - Exclude any irrelevant metadata or annotations
+   - Standardize punctuation and symbols
+   - Preserve original case and emphasis
+
+3. **Structure Elements:**
+   - Format headings using markdown syntax (### for main headings, #### for subheadings)
+   - Convert tables to markdown format using | and - characters
+   - Maintain lists and enumerations
+   - Preserve footnotes and references in their original positions
+
+4. **Quality Control:**
+   - Ensure accuracy of content conversion
+   - Maintain original text hierarchy
+   - Do not add or infer any content
+   - Preserve all numerical data and special characters
+
+### Input:
+
+## RAW TEXT ##
+{{extracted_text}}
+## END RAW TEXT ##
+
+### Output:
+
+Provide the markdown representation of the content, maintaining the original structure and formatting. Include only the markdown output, without additional explanations or comments.
