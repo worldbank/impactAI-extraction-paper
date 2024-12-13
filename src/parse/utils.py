@@ -5,7 +5,6 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Union, Optional
-import os
 import time
 from tqdm import tqdm
 from jinja2 import Template
@@ -23,7 +22,7 @@ from docling_core.types.doc import TableItem, TextItem
 
 
 from src.parse.settings import PDF2MarkdownSettings
-from src.utils.file_management import load_prompt_async
+from src.utils.file_management import load_prompt_async, get_secret
 from src.utils.openai_response import (
     process_text_chunk,
     process_text_chunk_gemini,
@@ -43,7 +42,7 @@ def setup_clients(
     if not settings.model_text:
         client_texts = None
     elif settings.model_text in ["gpt-4o-mini", "gpt-4o"]:
-        client_texts = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client_texts = AsyncOpenAI(api_key=get_secret("openai-api-key"))
     elif "gemini" in settings.model_text:
         client_texts = GenerativeModel(settings.model_text)
     else:
@@ -52,7 +51,7 @@ def setup_clients(
     if not settings.model_tables:
         client_tables = None
     elif settings.model_tables in ["gpt-4o-mini", "gpt-4o"]:
-        client_tables = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client_tables = AsyncOpenAI(api_key=get_secret("openai-api-key"))
     elif "gemini" in settings.model_tables:
         client_tables = GenerativeModel(settings.model_tables)
     else:
@@ -76,25 +75,6 @@ def setup_logger(verbose: bool) -> logging.Logger:
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
     return logging.getLogger(__name__)
-
-
-def get_pdf_files(input_path: Path, logger: logging.Logger) -> List[Path]:
-    """
-    Get list of PDF files from input directory.
-
-    Args:
-        input_path: Directory to search for PDFs
-        logger: Logger instance
-
-    Returns:
-        List of PDF file paths
-    """
-    pdf_files = list(input_path.glob("**/*.pdf"))
-    if not pdf_files:
-        logger.warning(f"No PDF files found in {input_path}")
-    else:
-        logger.info(f"Found {len(pdf_files)} PDF files to process")
-    return pdf_files
 
 
 def log_summary_metrics(
