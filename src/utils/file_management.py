@@ -96,20 +96,23 @@ def get_pdf_files(input_path: Path, logger: logging.Logger) -> List[Path]:
 
 
 def download_pdfs_from_bucket(
-    bucket_name: str, local_folder: Path, logger: logging.Logger
+    bucket_name: str, local_folder: str | Path, logger: logging.Logger
 ) -> List[Path]:
     """
     Download PDF files from a GCP bucket to a local folder.
 
     Args:
         bucket_name: Name of the GCP bucket.
-        local_folder: Local folder to store downloaded files.
+        local_folder: Local folder to store downloaded files (str or Path).
         logger: Logger instance.
 
     Returns:
         List of downloaded file paths.
     """
+    # Convert string path to Path object if necessary
+    local_folder = Path(local_folder)
     local_folder.mkdir(parents=True, exist_ok=True)
+
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blobs = bucket.list_blobs()

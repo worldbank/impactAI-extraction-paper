@@ -146,13 +146,15 @@ async def main_process_pdfs(
     total_completion_tokens = 0
     total_tokens = 0
 
+    documents = await ingest_pdfs_with_docling(pdf_files, logger, settings)
+
     with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
-        for pdf_path in pdf_files:
-            relative_path = pdf_path.relative_to(settings.path_input)
+        for pdf_file, document in zip(pdf_files, documents):
+            relative_path = pdf_file.relative_to(settings.path_input)
             output_path = settings.path_output / relative_path.with_suffix(".md")
 
             success, metrics = await process_pdf_with_docling(
-                pdf_path=pdf_path,
+                document=document,
                 output_path=output_path,
                 client_texts=client_texts,
                 client_tables=client_tables,
@@ -199,14 +201,14 @@ async def main_process_pdfs(
     }
 
 
-async def ingest_pdf_with_docling(
-    input_doc_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
+async def ingest_pdfs_with_docling(
+    input_folder_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
 ) -> DoclingDocument:
     """
     Ingest PDF file using Docling.
 
     Args:
-        input_doc_path: Path to input PDF
+        input_folder_path: Path to input folder
         logger: Logger instance
 
     Returns:
@@ -229,10 +231,10 @@ async def ingest_pdf_with_docling(
     )
 
     try:
-        conv_result = doc_converter.convert(input_doc_path)
-        return conv_result.document
+        conv_results = doc_converter.convert_all(input_folder_path)
+        return conv_results
     except Exception as e:
-        logger.error(f"Error ingesting PDF {input_doc_path}: {e}")
+        logger.error(f"Error ingesting PDF {input_folder_path}: {e}")
         raise
 
 
@@ -428,7 +430,7 @@ def create_progress_bar(total: int) -> tqdm:
 
 
 async def process_pdf_with_docling(
-    pdf_path: Path,
+    document: DoclingDocument,
     output_path: Path,
     client_texts: Union[AsyncOpenAI, GenerativeModel, None],
     client_tables: Union[AsyncOpenAI, GenerativeModel, None],
@@ -440,7 +442,7 @@ async def process_pdf_with_docling(
     Main processing function for Docling.
 
     Args:
-        pdf_path: Path to input PDF
+        document: DoclingDocument instance
         output_path: Path to output file
         client_texts: API client for text processing
         client_tables: API client for table processing
@@ -455,8 +457,8 @@ async def process_pdf_with_docling(
     """
     try:
         start_time = time.time()
-        document = await ingest_pdf_with_docling(pdf_path, logger, settings)
-        text_doc, table_doc = await split_document_content(document, logger)
+        print(type(document.document))
+        text_doc, table_doc = await split_document_content(document.document, logger)
 
         if client_tables:
             table_groups = associate_tables_and_texts(table_doc.tables, table_doc.texts)
@@ -493,7 +495,7 @@ async def process_pdf_with_docling(
         tables_path = output_path.with_stem(output_path.stem + "-tables")
         tables_path.write_text(table_text)
 
-        with open(Path(output_path.parent, pdf_path.stem + ".json"), "w") as f:
+        with open(Path(output_path.parent, output_path.stem + ".json"), "w") as f:
             json_metrics = {
                 "text_metrics": text_metrics,
                 "table_metrics": table_metrics,
@@ -517,7 +519,7 @@ async def process_pdf_with_docling(
             },
         }
     except Exception as e:
-        logger.error(f"Error converting {pdf_path.name}: {str(e)}")
+        logger.error(f"Error converting {output_path.stem}: {str(e)}")
         return False, {"error": str(e)}
 
 
@@ -789,7 +791,7 @@ async def process_table_groups(
                 try:
                     # Get page image and crop to table
                     page_no = group.table.prov[0][0].page_no
-                    page_image = conv_result.pages[page_no].image.pil_image
+                    page_image = conv_result.pages[page_no].image
                     cropped_img = crop_image_from_bbox(
                         page_image, group.bbox, margin=30, scale_factor=image_scale
                     )
