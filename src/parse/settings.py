@@ -22,12 +22,10 @@ class PDF2MarkdownSettings:
     path_prompt_tables: Path = Path(
         "config/prompts/pdf2markdown-table-postprocess.prompt"
     )
-    path_examples: Path = Path("config/examples/parsing")
+
     save_metrics: bool = True
     verbose: bool = True
-    batch_size: int = 1
-    document_concurrency_limit: int = 10
-    chunk_concurrency_limit: int = 20
+    batch_size: int = 20
 
     # Model settings
     model_text: str = "gpt-4o-mini"
