@@ -25,7 +25,7 @@ class PDF2MarkdownSettings:
 
     save_metrics: bool = True
     verbose: bool = True
-    batch_size: int = 20
+    batch_size: int = 30
 
     # Model settings
     model_text: str = "gpt-4o-mini"
