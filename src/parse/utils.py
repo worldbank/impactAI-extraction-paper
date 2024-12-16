@@ -335,7 +335,7 @@ async def process_document_text(
                 return empty_metrics()
 
             logger.info(f"Processing {len(parts)} text chunks")
-            pbar = create_progress_bar(len(parts))
+            pbar = create_progress_bar(len(parts), table_processing=False)
 
             async def process_and_update(
                 text: str, index: int
@@ -431,11 +431,24 @@ def empty_metrics() -> Tuple[str, Dict[str, int]]:
     }
 
 
-def create_progress_bar(total: int) -> tqdm:
+def create_progress_bar(total: int, table_processing: bool) -> tqdm:
     """Create a progress bar for processing text chunks."""
-    return tqdm(
-        total=total, desc="Processing text chunks", position=1, leave=False, ncols=100
-    )
+    if table_processing:
+        return tqdm(
+            total=total,
+            desc="Processing table chunks",
+            position=1,
+            leave=False,
+            ncols=100,
+        )
+    else:
+        return tqdm(
+            total=total,
+            desc="Processing text chunks",
+            position=1,
+            leave=False,
+            ncols=100,
+        )
 
 
 async def process_pdf_with_docling(
@@ -796,7 +809,7 @@ async def process_table_groups(
                 return [], empty_metrics()
 
             logger.info(f"Processing {len(table_groups)} tables")
-            pbar = create_progress_bar(len(table_groups))
+            pbar = create_progress_bar(len(table_groups), table_processing=True)
 
             async def process_single_table(
                 group: TableTextGroup, index: int
