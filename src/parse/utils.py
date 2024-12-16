@@ -144,22 +144,22 @@ async def main_process_pdfs(
     Returns:
         Dictionary containing metrics for all processed files
     """
-    semaphore = asyncio.Semaphore(settings.batch_size)
-    total_pages = 0
-    total_time = 0
-    successful = 0
-    total_prompt_tokens = 0
-    total_completion_tokens = 0
-    total_tokens = 0
+    pdf_semaphore = asyncio.Semaphore(settings.pdf_concurrency)
 
-    documents = await ingest_pdfs_with_docling(pdf_files, logger, settings)
+    # Semaphore for controlling concurrent chunk processing within each PDF
+    # You might want to adjust this value separately from batch_size
+    chunk_semaphore = asyncio.Semaphore(settings.chunk_concurrency)
 
-    with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
-        for pdf_file, document in zip(pdf_files, documents):
-            relative_path = pdf_file.relative_to(settings.path_input)
-            output_path = settings.path_output / relative_path.with_suffix(".md")
+    async def process_single_pdf(pdf_file: Path) -> Tuple[bool, Dict]:
+        relative_path = pdf_file.relative_to(settings.path_input)
+        output_path = settings.path_output / relative_path.with_suffix(".md")
 
-            success, metrics = await process_pdf_with_docling(
+        async with pdf_semaphore:  # Control concurrent PDF processing
+            document = await asyncio.get_event_loop().run_in_executor(
+                None,  # Uses default thread pool
+                lambda: ingest_pdf_with_docling_sync(pdf_file, logger, settings),
+            )
+            return await process_pdf_with_docling(
                 document=document,
                 pdf_name=pdf_file,
                 output_path=output_path,
@@ -167,23 +167,35 @@ async def main_process_pdfs(
                 client_tables=client_tables,
                 settings=settings,
                 logger=logger,
-                semaphore=semaphore,
+                semaphore=chunk_semaphore,  # Pass the chunk semaphore instead
             )
 
-            if success:
-                total_pages += metrics.get("pages", 0)
-                total_time += metrics.get("processing_time", 0)
-                successful += 1
+    tasks = [process_single_pdf(pdf_file) for pdf_file in pdf_files]
 
-                # Safely extract token metrics
-                token_metrics = metrics.get("token_metrics", {})
-                total_prompt_tokens += token_metrics.get("total_prompt_tokens", 0)
-                total_completion_tokens += token_metrics.get(
-                    "total_completion_tokens", 0
-                )
-                total_tokens += token_metrics.get("total_tokens", 0)
-
+    results = []
+    with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
+        for coro in asyncio.as_completed(tasks):
+            success, metrics = await coro
+            results.append((success, metrics))
             pbar.update(1)
+
+    total_pages = 0
+    total_time = 0
+    successful = 0
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_tokens = 0
+
+    for success, metrics in results:
+        if success:
+            total_pages += metrics.get("pages", 0)
+            total_time += metrics.get("processing_time", 0)
+            successful += 1
+
+            token_metrics = metrics.get("token_metrics", {})
+            total_prompt_tokens += token_metrics.get("total_prompt_tokens", 0)
+            total_completion_tokens += token_metrics.get("total_completion_tokens", 0)
+            total_tokens += token_metrics.get("total_tokens", 0)
 
     return {
         "total_documents": len(pdf_files),
@@ -208,8 +220,8 @@ async def main_process_pdfs(
     }
 
 
-async def ingest_pdfs_with_docling(
-    input_folder_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
+def ingest_pdf_with_docling_sync(
+    input_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
 ) -> DoclingDocument:
     """
     Ingest PDF file using Docling.
@@ -240,10 +252,10 @@ async def ingest_pdfs_with_docling(
     )
 
     try:
-        conv_results = doc_converter.convert_all(input_folder_path)
-        return conv_results
+        conv_result = doc_converter.convert(input_path)
+        return conv_result
     except Exception as e:
-        logger.error(f"Error ingesting PDF {input_folder_path}: {e}")
+        logger.error(f"Error ingesting PDF {input_path}: {e}")
         raise
 
 
