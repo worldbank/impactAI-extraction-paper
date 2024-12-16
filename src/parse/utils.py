@@ -12,10 +12,16 @@ from openai import AsyncOpenAI
 from PIL import Image
 from google.generativeai import GenerativeModel
 from dataclasses import dataclass
+from pdf2image import convert_from_path
+import tempfile
 
 from docling_core.types.doc import DoclingDocument
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import (
+    PdfPipelineOptions,
+    AcceleratorOptions,
+    AcceleratorDevice,
+)
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import DocItemLabel
 from docling_core.types.doc import TableItem, TextItem
@@ -155,6 +161,7 @@ async def main_process_pdfs(
 
             success, metrics = await process_pdf_with_docling(
                 document=document,
+                pdf_name=pdf_file,
                 output_path=output_path,
                 client_texts=client_texts,
                 client_tables=client_tables,
@@ -218,11 +225,13 @@ async def ingest_pdfs_with_docling(
     pipeline_options.do_table_structure = True
     pipeline_options.table_structure_options.do_cell_matching = True
     pipeline_options.do_ocr = True
-    if settings.model_tables:
-        logger.info("Using table model, generating images")
-        pipeline_options.images_scale = 2.0
-        pipeline_options.generate_page_images = True
-        pipeline_options.generate_picture_images = True
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        num_threads=4, device=AcceleratorDevice.AUTO
+    )
+    # if settings.model_tables:
+    #    logger.info("Using table model, generating images")
+    #    pipeline_options.images_scale = 2.0
+    #    pipeline_options.generate_page_images = True
 
     doc_converter = DocumentConverter(
         format_options={
@@ -431,6 +440,7 @@ def create_progress_bar(total: int) -> tqdm:
 
 async def process_pdf_with_docling(
     document: DoclingDocument,
+    pdf_name: str,
     output_path: Path,
     client_texts: Union[AsyncOpenAI, GenerativeModel, None],
     client_tables: Union[AsyncOpenAI, GenerativeModel, None],
@@ -443,6 +453,7 @@ async def process_pdf_with_docling(
 
     Args:
         document: DoclingDocument instance
+        pdf_name: Name of the PDF file
         output_path: Path to output file
         client_texts: API client for text processing
         client_tables: API client for table processing
@@ -457,7 +468,6 @@ async def process_pdf_with_docling(
     """
     try:
         start_time = time.time()
-        print(type(document.document))
         text_doc, table_doc = await split_document_content(document.document, logger)
 
         if client_tables:
@@ -469,6 +479,7 @@ async def process_pdf_with_docling(
                 settings=settings,
                 logger=logger,
                 semaphore=semaphore,
+                pdf_name=pdf_name,
             )
         else:
             logger.info("No table model selected, using document tables")
@@ -709,6 +720,7 @@ async def process_document_tables(
     settings: PDF2MarkdownSettings,
     logger: logging.Logger,
     semaphore: asyncio.Semaphore,
+    pdf_name: str,
 ):
     """
     Process all tables in a document.
@@ -730,6 +742,7 @@ async def process_document_tables(
 
     results, metrics = await process_table_groups(
         table_groups=table_groups,
+        pdf_name=pdf_name,
         conv_result=conv_result,
         client_tables=client_tables,
         settings=settings,
@@ -748,6 +761,7 @@ async def process_document_tables(
 
 async def process_table_groups(
     table_groups: List[TableTextGroup],
+    pdf_name: str,
     conv_result: DoclingDocument,
     client_tables: Union[AsyncOpenAI, GenerativeModel],
     settings: PDF2MarkdownSettings,
@@ -791,9 +805,23 @@ async def process_table_groups(
                 try:
                     # Get page image and crop to table
                     page_no = group.table.prov[0][0].page_no
-                    page_image = conv_result.pages[page_no].image
+                    # page_image = conv_result.pages[page_no].image
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        page_image = convert_from_path(
+                            pdf_name,
+                            dpi=300,
+                            output_folder=temp_dir,
+                            first_page=page_no,
+                            last_page=page_no,
+                            fmt="png",
+                            thread_count=1,
+                        )[0]
                     cropped_img = crop_image_from_bbox(
-                        page_image, group.bbox, margin=30, scale_factor=image_scale
+                        page_image,
+                        group.bbox,
+                        margin=30,
+                        scale_factor=image_scale
+                        * 2.0833333333333335,  # this is the scale factor for the table compared to the docling image with DPI of 300 and image scale of 2.0 for docling
                     )
 
                     # Encode image
