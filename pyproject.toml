@@ -19,7 +19,6 @@ aiofiles = "^24.1.0"
 tqdm = "^4.66.6"
 setfit = "^1.1.0"
 datasets = "^3.1.0"
-transformers = "4.41.0"
 doclayout-yolo = "^0.0.2"
 tiktoken = "^0.8.0"
 pdf2image = "^1.17.0"
@@ -28,7 +27,8 @@ google-generativeai = "^0.8.3"
 python-poppler = "^0.4.1"
 google-cloud-secret-manager = "^2.22.0"
 google-cloud-storage = "^2.19.0"
-docling = "^2.11.0"
+transformers = "^4.47.0"
+docling = "^2.12.0"
 
 
 [tool.poetry.group.dev.dependencies]
