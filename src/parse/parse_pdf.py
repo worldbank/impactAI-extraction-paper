@@ -11,10 +11,16 @@ from src.parse.utils import (
     setup_clients,
 )
 
-from src.utils.file_management import download_pdfs_from_bucket, upload_to_bucket
+from src.utils.file_management import (
+    download_pdfs_from_bucket,
+    upload_to_bucket,
+    download_processed_list_and_metrics,
+)
 import os
 
 load_dotenv()
+
+os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0 6.1 7.0 7.5 8.0 8.6"
 
 
 async def main(
@@ -32,31 +38,30 @@ async def main(
     # Setup
     logger = setup_logger(settings.verbose)
 
-    # Create temporary directory if it doesn't exist
-    temp_dir = "/tmp/pdf_processing"
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Update settings path_input to use temp directory
-    settings.path_input = temp_dir
+    already_processed_pdfs, metrics_data = download_processed_list_and_metrics(
+        settings.processed_bucket, settings.path_input, logger
+    )
+    logger.info(f"Already processed PDFs: {len(already_processed_pdfs)}")
 
     # Get PDF files
     pdf_files = download_pdfs_from_bucket(
-        settings.raw_bucket, settings.path_input, logger
+        settings.raw_bucket, settings.path_input, logger, already_processed_pdfs
     )
 
     if not pdf_files:
-        logger.error("No PDFs found in bucket")
+        logger.error("No new PDFs found in bucket")
         return
 
     if n_samples:
-        pdf_files = [pdf for pdf in pdf_files[:n_samples]]
+        pdf_files = [pdf for pdf in pdf_files[:+n_samples]]
 
     # Setup converter function and client if needed
     client_texts, client_tables = setup_clients(settings)
     logger.info("Using Docling processing")
     # Process PDFs concurrently
-    metrics = await main_process_pdfs(
+    metrics, processed_pdfs = await main_process_pdfs(
         pdf_files=pdf_files,
+        metrics_data=metrics_data,
         settings=settings,
         logger=logger,
         client_texts=client_texts,
@@ -65,17 +70,22 @@ async def main(
 
     # Log summary
     log_summary_metrics(metrics, len(pdf_files), logger)
-    logger.info("Uploading processed files to GCP bucket...")
-    upload_to_bucket(settings.processed_bucket, settings.path_output, logger)
     # Save metrics if requested
     if settings.save_metrics:
-        await save_metrics(metrics, settings.path_metrics, logger)
+        already_processed_pdfs += processed_pdfs
+        await save_metrics(
+            metrics, already_processed_pdfs, settings.path_metrics, logger
+        )
+
+    logger.info("Uploading processed files to GCP bucket...")
+    upload_to_bucket(settings.processed_bucket, settings.path_output, logger)
 
     # Clean up temporary files after processing
     try:
-        for file in os.listdir(temp_dir):
-            os.remove(os.path.join(temp_dir, file))
-        os.rmdir(temp_dir)
+        for temp_dir in [settings.path_input, settings.path_output]:
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
+            os.rmdir(temp_dir)
     except Exception as e:
         logger.warning(f"Error cleaning up temporary directory: {e}")
 
