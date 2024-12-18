@@ -96,7 +96,10 @@ def get_pdf_files(input_path: Path, logger: logging.Logger) -> List[Path]:
 
 
 def download_pdfs_from_bucket(
-    bucket_name: str, local_folder: str | Path, logger: logging.Logger
+    bucket_name: str,
+    local_folder: str | Path,
+    logger: logging.Logger,
+    already_processed_pdfs: List[str],
 ) -> List[Path]:
     """
     Download PDF files from a GCP bucket to a local folder.
@@ -119,7 +122,9 @@ def download_pdfs_from_bucket(
 
     downloaded_files = []
     for blob in blobs:
-        if blob.name.endswith(".pdf"):  # Ensure only PDFs are downloaded
+        if (
+            blob.name.endswith(".pdf") and blob.name not in already_processed_pdfs
+        ):  # Ensure only PDFs are downloaded
             local_path = local_folder / blob.name
             blob.download_to_filename(local_path)
             logger.info(f"Downloaded {blob.name} to {local_path}")
@@ -148,3 +153,54 @@ def upload_to_bucket(
         blob = bucket.blob(file_path.name)
         blob.upload_from_filename(str(file_path))
         logger.info(f"Uploaded {file_path.name} to bucket {bucket_name}")
+
+
+def download_processed_list_and_metrics(
+    bucket_name: str, local_folder: str | Path, logger: logging.Logger
+) -> tuple[List[str], Dict]:
+    """
+    Download processed PDFs list and metrics from a GCP bucket.
+
+    Args:
+        bucket_name: Name of the GCP bucket.
+        local_folder: Local folder to store downloaded files (str or Path).
+        logger: Logger instance.
+
+    Returns:
+        Tuple containing:
+        - List of processed PDF names
+        - Dictionary containing metrics data
+    """
+    # Convert string path to Path object if necessary
+    local_folder = Path(local_folder)
+    local_folder.mkdir(parents=True, exist_ok=True)
+
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    processed_pdfs = []
+    metrics_data = {}
+
+    # Download and read processed_pdfs.txt
+    processed_list_blob = bucket.blob("processed_pdfs.txt")
+    if processed_list_blob.exists():
+        local_list_path = local_folder / "processed_pdfs.txt"
+        processed_list_blob.download_to_filename(local_list_path)
+        logger.info(f"Downloaded processed PDFs list to {local_list_path}")
+        with open(local_list_path, "r") as f:
+            processed_pdfs = [line.strip() for line in f.readlines()]
+    else:
+        logger.warning("No processed_pdfs.txt found in bucket")
+
+    # Download and read metrics.json
+    metrics_blob = bucket.blob("metrics.json")
+    if metrics_blob.exists():
+        local_metrics_path = local_folder / "metrics.json"
+        metrics_blob.download_to_filename(local_metrics_path)
+        logger.info(f"Downloaded metrics to {local_metrics_path}")
+        with open(local_metrics_path, "r") as f:
+            metrics_data = json.load(f)
+    else:
+        logger.warning("No metrics.json found in bucket")
+
+    return processed_pdfs, metrics_data
