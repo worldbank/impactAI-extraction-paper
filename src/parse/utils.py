@@ -5,7 +5,6 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Union, Optional
-import os
 import time
 from tqdm import tqdm
 from jinja2 import Template
@@ -13,17 +12,23 @@ from openai import AsyncOpenAI
 from PIL import Image
 from google.generativeai import GenerativeModel
 from dataclasses import dataclass
+from pdf2image import convert_from_path
+import tempfile
 
 from docling_core.types.doc import DoclingDocument
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import (
+    PdfPipelineOptions,
+    AcceleratorOptions,
+    AcceleratorDevice,
+)
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import DocItemLabel
 from docling_core.types.doc import TableItem, TextItem
 
 
 from src.parse.settings import PDF2MarkdownSettings
-from src.utils.file_management import load_prompt_async
+from src.utils.file_management import load_prompt_async, get_secret
 from src.utils.openai_response import (
     process_text_chunk,
     process_text_chunk_gemini,
@@ -43,7 +48,7 @@ def setup_clients(
     if not settings.model_text:
         client_texts = None
     elif settings.model_text in ["gpt-4o-mini", "gpt-4o"]:
-        client_texts = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client_texts = AsyncOpenAI(api_key=get_secret("openai-api-key"))
     elif "gemini" in settings.model_text:
         client_texts = GenerativeModel(settings.model_text)
     else:
@@ -52,7 +57,7 @@ def setup_clients(
     if not settings.model_tables:
         client_tables = None
     elif settings.model_tables in ["gpt-4o-mini", "gpt-4o"]:
-        client_tables = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client_tables = AsyncOpenAI(api_key=get_secret("openai-api-key"))
     elif "gemini" in settings.model_tables:
         client_tables = GenerativeModel(settings.model_tables)
     else:
@@ -76,25 +81,6 @@ def setup_logger(verbose: bool) -> logging.Logger:
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
     return logging.getLogger(__name__)
-
-
-def get_pdf_files(input_path: Path, logger: logging.Logger) -> List[Path]:
-    """
-    Get list of PDF files from input directory.
-
-    Args:
-        input_path: Directory to search for PDFs
-        logger: Logger instance
-
-    Returns:
-        List of PDF file paths
-    """
-    pdf_files = list(input_path.glob("**/*.pdf"))
-    if not pdf_files:
-        logger.warning(f"No PDF files found in {input_path}")
-    else:
-        logger.info(f"Found {len(pdf_files)} PDF files to process")
-    return pdf_files
 
 
 def log_summary_metrics(
@@ -122,13 +108,17 @@ def log_summary_metrics(
 
 
 async def save_metrics(
-    metrics: Dict, metrics_path: Path, logger: logging.Logger
+    metrics: Dict,
+    processed_pdfs: List[Path],
+    metrics_path: Path,
+    logger: logging.Logger,
 ) -> None:
     """
     Save metrics to JSON file.
 
     Args:
         metrics: Dictionary of metrics to save
+        processed_pdfs: List of processed PDF files
         metrics_path: Path to save metrics
         logger: Logger instance
     """
@@ -137,10 +127,19 @@ async def save_metrics(
         None, lambda: json.dump(metrics, open(metrics_path, "w"), indent=4)
     )
     logger.info(f"Metrics saved to {metrics_path}")
+    processed_pdfs_path = metrics_path.parent / "processed_pdfs.txt"
+    await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: processed_pdfs_path.write_text(
+            "\n".join([str(pdf).split("/")[-1] for pdf in processed_pdfs])
+        ),
+    )
+    logger.info(f"Processed PDFs saved to {processed_pdfs_path}")
 
 
 async def main_process_pdfs(
     pdf_files: List[Path],
+    metrics_data: Dict,
     settings: PDF2MarkdownSettings,
     logger: logging.Logger,
     client_texts: Optional[Union[AsyncOpenAI, GenerativeModel, None]] = None,
@@ -158,49 +157,69 @@ async def main_process_pdfs(
     Returns:
         Dictionary containing metrics for all processed files
     """
-    semaphore = asyncio.Semaphore(settings.batch_size)
-    total_pages = 0
-    total_time = 0
-    successful = 0
-    total_prompt_tokens = 0
-    total_completion_tokens = 0
-    total_tokens = 0
+    pdf_semaphore = asyncio.Semaphore(settings.pdf_concurrency)
 
-    with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
-        for pdf_path in pdf_files:
-            relative_path = pdf_path.relative_to(settings.path_input)
-            output_path = settings.path_output / relative_path.with_suffix(".md")
+    # Semaphore for controlling concurrent chunk processing within each PDF
+    # You might want to adjust this value separately from batch_size
+    chunk_semaphore = asyncio.Semaphore(settings.chunk_concurrency)
 
-            success, metrics = await process_pdf_with_docling(
-                pdf_path=pdf_path,
+    async def process_single_pdf(pdf_file: Path) -> Tuple[bool, Dict]:
+        relative_path = pdf_file.relative_to(settings.path_input)
+        output_path = settings.path_output / relative_path.with_suffix(".md")
+
+        async with pdf_semaphore:  # Control concurrent PDF processing
+            document = await asyncio.get_event_loop().run_in_executor(
+                None,  # Uses default thread pool
+                lambda: ingest_pdf_with_docling_sync(pdf_file, logger, settings),
+            )
+            return await process_pdf_with_docling(
+                document=document,
+                pdf_name=pdf_file,
                 output_path=output_path,
                 client_texts=client_texts,
                 client_tables=client_tables,
                 settings=settings,
                 logger=logger,
-                semaphore=semaphore,
+                semaphore=chunk_semaphore,  # Pass the chunk semaphore instead
             )
 
-            if success:
-                total_pages += metrics.get("pages", 0)
-                total_time += metrics.get("processing_time", 0)
-                successful += 1
+    tasks = [process_single_pdf(pdf_file) for pdf_file in pdf_files]
 
-                # Safely extract token metrics
-                token_metrics = metrics.get("token_metrics", {})
-                total_prompt_tokens += token_metrics.get("total_prompt_tokens", 0)
-                total_completion_tokens += token_metrics.get(
-                    "total_completion_tokens", 0
-                )
-                total_tokens += token_metrics.get("total_tokens", 0)
-
+    results = []
+    with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
+        for coro in asyncio.as_completed(tasks):
+            success, metrics = await coro
+            results.append((success, metrics))
             pbar.update(1)
 
+    total_documents = metrics_data.get("total_documents", 0)
+    total_pages = metrics_data.get("total_pages", 0)
+    total_time = metrics_data.get("total_time", 0)
+    successful = metrics_data.get("successful_conversions", 0)
+    total_prompt_tokens = metrics_data.get("total_prompt_tokens", 0)
+    total_completion_tokens = metrics_data.get("total_completion_tokens", 0)
+    total_tokens = metrics_data.get("total_tokens", 0)
+    processed_pdfs = []
+
+    for pdf_file, (success, metrics) in zip(pdf_files, results):
+        if success:
+            total_documents += 1
+            total_pages += metrics.get("pages", 0)
+            total_time += metrics.get("processing_time", 0)
+            successful += 1
+
+            token_metrics = metrics.get("token_metrics", {})
+            total_prompt_tokens += token_metrics.get("total_prompt_tokens", 0)
+            total_completion_tokens += token_metrics.get("total_completion_tokens", 0)
+            total_tokens += token_metrics.get("total_tokens", 0)
+            processed_pdfs.append(pdf_file)
+
     return {
-        "total_documents": len(pdf_files),
+        "total_documents": total_documents,
         "successful_conversions": successful,
         "total_pages": total_pages,
-        "average_time_per_document": total_time / len(pdf_files) if pdf_files else 0,
+        "total_time": total_time,
+        "average_time_per_document": total_time / total_documents,
         "average_time_per_page": total_time / total_pages if total_pages else 0,
         "token_metrics": {
             "total_prompt_tokens": total_prompt_tokens,
@@ -216,17 +235,17 @@ async def main_process_pdfs(
             if total_pages > 0
             else 0,
         },
-    }
+    }, processed_pdfs
 
 
-async def ingest_pdf_with_docling(
-    input_doc_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
+def ingest_pdf_with_docling_sync(
+    input_path: Path, logger: logging.Logger, settings: PDF2MarkdownSettings
 ) -> DoclingDocument:
     """
     Ingest PDF file using Docling.
 
     Args:
-        input_doc_path: Path to input PDF
+        input_folder_path: Path to input folder
         logger: Logger instance
 
     Returns:
@@ -236,11 +255,13 @@ async def ingest_pdf_with_docling(
     pipeline_options.do_table_structure = True
     pipeline_options.table_structure_options.do_cell_matching = True
     pipeline_options.do_ocr = True
-    if settings.model_tables:
-        logger.info("Using table model, generating images")
-        pipeline_options.images_scale = 2.0
-        pipeline_options.generate_page_images = True
-        pipeline_options.generate_picture_images = True
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        num_threads=4, device=AcceleratorDevice.AUTO
+    )
+    # if settings.model_tables:
+    #    logger.info("Using table model, generating images")
+    #    pipeline_options.images_scale = 2.0
+    #    pipeline_options.generate_page_images = True
 
     doc_converter = DocumentConverter(
         format_options={
@@ -249,10 +270,10 @@ async def ingest_pdf_with_docling(
     )
 
     try:
-        conv_result = doc_converter.convert(input_doc_path)
-        return conv_result.document
+        conv_result = doc_converter.convert(input_path)
+        return conv_result
     except Exception as e:
-        logger.error(f"Error ingesting PDF {input_doc_path}: {e}")
+        logger.error(f"Error ingesting PDF {input_path}: {e}")
         raise
 
 
@@ -344,7 +365,7 @@ async def process_document_text(
                 return empty_metrics()
 
             logger.info(f"Processing {len(parts)} text chunks")
-            pbar = create_progress_bar(len(parts))
+            pbar = create_progress_bar(len(parts), table_processing=False)
 
             async def process_and_update(
                 text: str, index: int
@@ -440,15 +461,29 @@ def empty_metrics() -> Tuple[str, Dict[str, int]]:
     }
 
 
-def create_progress_bar(total: int) -> tqdm:
+def create_progress_bar(total: int, table_processing: bool) -> tqdm:
     """Create a progress bar for processing text chunks."""
-    return tqdm(
-        total=total, desc="Processing text chunks", position=1, leave=False, ncols=100
-    )
+    if table_processing:
+        return tqdm(
+            total=total,
+            desc="Processing table chunks",
+            position=1,
+            leave=False,
+            ncols=100,
+        )
+    else:
+        return tqdm(
+            total=total,
+            desc="Processing text chunks",
+            position=1,
+            leave=False,
+            ncols=100,
+        )
 
 
 async def process_pdf_with_docling(
-    pdf_path: Path,
+    document: DoclingDocument,
+    pdf_name: str,
     output_path: Path,
     client_texts: Union[AsyncOpenAI, GenerativeModel, None],
     client_tables: Union[AsyncOpenAI, GenerativeModel, None],
@@ -460,7 +495,8 @@ async def process_pdf_with_docling(
     Main processing function for Docling.
 
     Args:
-        pdf_path: Path to input PDF
+        document: DoclingDocument instance
+        pdf_name: Name of the PDF file
         output_path: Path to output file
         client_texts: API client for text processing
         client_tables: API client for table processing
@@ -475,8 +511,7 @@ async def process_pdf_with_docling(
     """
     try:
         start_time = time.time()
-        document = await ingest_pdf_with_docling(pdf_path, logger, settings)
-        text_doc, table_doc = await split_document_content(document, logger)
+        text_doc, table_doc = await split_document_content(document.document, logger)
 
         if client_tables:
             table_groups = associate_tables_and_texts(table_doc.tables, table_doc.texts)
@@ -487,6 +522,7 @@ async def process_pdf_with_docling(
                 settings=settings,
                 logger=logger,
                 semaphore=semaphore,
+                pdf_name=pdf_name,
             )
         else:
             logger.info("No table model selected, using document tables")
@@ -513,7 +549,7 @@ async def process_pdf_with_docling(
         tables_path = output_path.with_stem(output_path.stem + "-tables")
         tables_path.write_text(table_text)
 
-        with open(Path(output_path.parent, pdf_path.stem + ".json"), "w") as f:
+        with open(Path(output_path.parent, output_path.stem + ".json"), "w") as f:
             json_metrics = {
                 "text_metrics": text_metrics,
                 "table_metrics": table_metrics,
@@ -537,7 +573,7 @@ async def process_pdf_with_docling(
             },
         }
     except Exception as e:
-        logger.error(f"Error converting {pdf_path.name}: {str(e)}")
+        logger.error(f"Error converting {output_path.stem}: {str(e)}")
         return False, {"error": str(e)}
 
 
@@ -727,6 +763,7 @@ async def process_document_tables(
     settings: PDF2MarkdownSettings,
     logger: logging.Logger,
     semaphore: asyncio.Semaphore,
+    pdf_name: str,
 ):
     """
     Process all tables in a document.
@@ -748,6 +785,7 @@ async def process_document_tables(
 
     results, metrics = await process_table_groups(
         table_groups=table_groups,
+        pdf_name=pdf_name,
         conv_result=conv_result,
         client_tables=client_tables,
         settings=settings,
@@ -766,6 +804,7 @@ async def process_document_tables(
 
 async def process_table_groups(
     table_groups: List[TableTextGroup],
+    pdf_name: str,
     conv_result: DoclingDocument,
     client_tables: Union[AsyncOpenAI, GenerativeModel],
     settings: PDF2MarkdownSettings,
@@ -800,7 +839,7 @@ async def process_table_groups(
                 return [], empty_metrics()
 
             logger.info(f"Processing {len(table_groups)} tables")
-            pbar = create_progress_bar(len(table_groups))
+            pbar = create_progress_bar(len(table_groups), table_processing=True)
 
             async def process_single_table(
                 group: TableTextGroup, index: int
@@ -809,9 +848,23 @@ async def process_table_groups(
                 try:
                     # Get page image and crop to table
                     page_no = group.table.prov[0][0].page_no
-                    page_image = conv_result.pages[page_no].image.pil_image
+                    # page_image = conv_result.pages[page_no].image
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        page_image = convert_from_path(
+                            pdf_name,
+                            dpi=300,
+                            output_folder=temp_dir,
+                            first_page=page_no,
+                            last_page=page_no,
+                            fmt="png",
+                            thread_count=1,
+                        )[0]
                     cropped_img = crop_image_from_bbox(
-                        page_image, group.bbox, margin=30, scale_factor=image_scale
+                        page_image,
+                        group.bbox,
+                        margin=30,
+                        scale_factor=image_scale
+                        * 2.0833333333333335,  # this is the scale factor for the table compared to the docling image with DPI of 300 and image scale of 2.0 for docling
                     )
 
                     # Encode image

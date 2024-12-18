@@ -33,7 +33,7 @@ Return the corrected and verified markdown table with the following structure:
 [Corrected notes or observations from the image]
 ```
 
-If the extracted markdown is already accurate, return it as-is. If the table cannot be corrected due to poor image quality or missing data, return a note stating: "The table could not be verified or corrected due to insufficient image clarity or missing data."
+If the extracted markdown is already accurate, return it as-is. If the table cannot be corrected due to poor image quality or missing data, return a note stating: "The table could not be verified or corrected due to insufficient image clarity or missing data." and the original OCR-extracted markdown table.
 
 ### Output Format:
 Always return the corrected table in markdown syntax.
