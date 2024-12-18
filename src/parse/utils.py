@@ -158,9 +158,6 @@ async def main_process_pdfs(
         Dictionary containing metrics for all processed files
     """
     pdf_semaphore = asyncio.Semaphore(settings.pdf_concurrency)
-
-    # Semaphore for controlling concurrent chunk processing within each PDF
-    # You might want to adjust this value separately from batch_size
     chunk_semaphore = asyncio.Semaphore(settings.chunk_concurrency)
 
     async def process_single_pdf(pdf_file: Path) -> Tuple[bool, Dict]:
@@ -172,7 +169,7 @@ async def main_process_pdfs(
                 None,  # Uses default thread pool
                 lambda: ingest_pdf_with_docling_sync(pdf_file, logger, settings),
             )
-            return await process_pdf_with_docling(
+            success, metrics = await process_pdf_with_docling(
                 document=document,
                 pdf_name=pdf_file,
                 output_path=output_path,
@@ -180,16 +177,19 @@ async def main_process_pdfs(
                 client_tables=client_tables,
                 settings=settings,
                 logger=logger,
-                semaphore=chunk_semaphore,  # Pass the chunk semaphore instead
+                semaphore=chunk_semaphore,
             )
+            return pdf_file, success, metrics
+
+        # Create tasks with PDF file information
 
     tasks = [process_single_pdf(pdf_file) for pdf_file in pdf_files]
 
     results = []
     with tqdm(total=len(pdf_files), desc="Converting PDFs") as pbar:
         for coro in asyncio.as_completed(tasks):
-            success, metrics = await coro
-            results.append((success, metrics))
+            result = await coro
+            results.append(result)
             pbar.update(1)
 
     total_documents = metrics_data.get("total_documents", 0)
@@ -201,7 +201,7 @@ async def main_process_pdfs(
     total_tokens = metrics_data.get("total_tokens", 0)
     processed_pdfs = []
 
-    for pdf_file, (success, metrics) in zip(pdf_files, results):
+    for pdf_file, success, metrics in results:
         if success:
             total_documents += 1
             total_pages += metrics.get("pages", 0)
@@ -835,8 +835,8 @@ async def process_table_groups(
     try:
         async with semaphore:
             if not table_groups:
-                logger.error("No table groups to process")
-                return [], empty_metrics()
+                logger.info("No table groups to process")
+                return "", empty_metrics()[1]
 
             logger.info(f"Processing {len(table_groups)} tables")
             pbar = create_progress_bar(len(table_groups), table_processing=True)
