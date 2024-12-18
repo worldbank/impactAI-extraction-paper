@@ -108,13 +108,17 @@ def log_summary_metrics(
 
 
 async def save_metrics(
-    metrics: Dict, metrics_path: Path, logger: logging.Logger
+    metrics: Dict,
+    processed_pdfs: List[Path],
+    metrics_path: Path,
+    logger: logging.Logger,
 ) -> None:
     """
     Save metrics to JSON file.
 
     Args:
         metrics: Dictionary of metrics to save
+        processed_pdfs: List of processed PDF files
         metrics_path: Path to save metrics
         logger: Logger instance
     """
@@ -123,10 +127,19 @@ async def save_metrics(
         None, lambda: json.dump(metrics, open(metrics_path, "w"), indent=4)
     )
     logger.info(f"Metrics saved to {metrics_path}")
+    processed_pdfs_path = metrics_path.parent / "processed_pdfs.txt"
+    await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: processed_pdfs_path.write_text(
+            "\n".join([str(pdf).split("/")[-1] for pdf in processed_pdfs])
+        ),
+    )
+    logger.info(f"Processed PDFs saved to {processed_pdfs_path}")
 
 
 async def main_process_pdfs(
     pdf_files: List[Path],
+    metrics_data: Dict,
     settings: PDF2MarkdownSettings,
     logger: logging.Logger,
     client_texts: Optional[Union[AsyncOpenAI, GenerativeModel, None]] = None,
@@ -179,15 +192,18 @@ async def main_process_pdfs(
             results.append((success, metrics))
             pbar.update(1)
 
-    total_pages = 0
-    total_time = 0
-    successful = 0
-    total_prompt_tokens = 0
-    total_completion_tokens = 0
-    total_tokens = 0
+    total_documents = metrics_data.get("total_documents", 0)
+    total_pages = metrics_data.get("total_pages", 0)
+    total_time = metrics_data.get("total_time", 0)
+    successful = metrics_data.get("successful_conversions", 0)
+    total_prompt_tokens = metrics_data.get("total_prompt_tokens", 0)
+    total_completion_tokens = metrics_data.get("total_completion_tokens", 0)
+    total_tokens = metrics_data.get("total_tokens", 0)
+    processed_pdfs = []
 
-    for success, metrics in results:
+    for pdf_file, (success, metrics) in zip(pdf_files, results):
         if success:
+            total_documents += 1
             total_pages += metrics.get("pages", 0)
             total_time += metrics.get("processing_time", 0)
             successful += 1
@@ -196,12 +212,14 @@ async def main_process_pdfs(
             total_prompt_tokens += token_metrics.get("total_prompt_tokens", 0)
             total_completion_tokens += token_metrics.get("total_completion_tokens", 0)
             total_tokens += token_metrics.get("total_tokens", 0)
+            processed_pdfs.append(pdf_file)
 
     return {
-        "total_documents": len(pdf_files),
+        "total_documents": total_documents,
         "successful_conversions": successful,
         "total_pages": total_pages,
-        "average_time_per_document": total_time / len(pdf_files) if pdf_files else 0,
+        "total_time": total_time,
+        "average_time_per_document": total_time / total_documents,
         "average_time_per_page": total_time / total_pages if total_pages else 0,
         "token_metrics": {
             "total_prompt_tokens": total_prompt_tokens,
@@ -217,7 +235,7 @@ async def main_process_pdfs(
             if total_pages > 0
             else 0,
         },
-    }
+    }, processed_pdfs
 
 
 def ingest_pdf_with_docling_sync(
