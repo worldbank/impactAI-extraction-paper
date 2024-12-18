@@ -196,9 +196,13 @@ async def main_process_pdfs(
     total_pages = metrics_data.get("total_pages", 0)
     total_time = metrics_data.get("total_time", 0)
     successful = metrics_data.get("successful_conversions", 0)
-    total_prompt_tokens = metrics_data.get("total_prompt_tokens", 0)
-    total_completion_tokens = metrics_data.get("total_completion_tokens", 0)
-    total_tokens = metrics_data.get("total_tokens", 0)
+    total_prompt_tokens = metrics_data.get("token_metrics", {}).get(
+        "total_prompt_tokens", 0
+    )
+    total_completion_tokens = metrics_data.get("token_metrics", {}).get(
+        "total_completion_tokens", 0
+    )
+    total_tokens = metrics_data.get("token_metrics", {}).get("total_tokens", 0)
     processed_pdfs = []
 
     for pdf_file, success, metrics in results:
