@@ -25,7 +25,7 @@ class PDF2MarkdownSettings:
 
     save_metrics: bool = True
     verbose: bool = True
-    pdf_concurrency: int = 5
+    pdf_concurrency: int = 8
     chunk_concurrency: int = 30
     # Model settings
     model_text: str = "gpt-4o-mini"
