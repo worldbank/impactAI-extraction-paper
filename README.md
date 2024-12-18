@@ -93,7 +93,7 @@ model_text = "gpt-4o-mini"  # For text processing
 model_tables = "gpt-4o"     # For table processing
 ```
 
-### Pipeline Steps
+###  Pipeline Steps
 
 1. **Document Loading**
    - Parallel scanning of input directory for PDF files
@@ -127,21 +127,71 @@ model_tables = "gpt-4o"     # For table processing
    - Creates separate files for main text and tables
    - Saves processing metrics for analysis
 
+### 🚀 Local Usage Without GCP
+
+To use this pipeline locally without Google Cloud Platform:
+
+1. **Local Setup**
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/impactAI-extraction-paper.git
+cd impactAI-extraction-paper
+
+# Install dependencies using Poetry
+poetry install
+```
+
+2. **Configure Local Settings**
+Create a `.env` file in the project root:
+```bash
+# .env
+RAW_BUCKET=path/to/input/pdfs
+PROCESSED_BUCKET=path/to/output/files
+OPENAI_API_KEY=your-openai-key  # If using OpenAI models
+```
+
+3. **Run Locally**
+```bash
+# Process PDFs in local directory
+poetry run python src/parse/parse_pdf.py --verbose
+
+# Process specific number of PDFs
+poetry run python src/parse/parse_pdf.py --n_samples 5
+```
+
+### VM Setup with Startup Script
+
 1. **VM Configuration**
 ```bash
 # Create VM with T4 GPU
 gcloud compute instances create pdf-parser-vm \
     --project=impactai-430615 \
     --zone=us-central1-a \
-    --machine-type=n1-highcpu-8 \
+    --machine-type=n1-highcpu-16 \
     --accelerator="type=nvidia-tesla-t4,count=1" \
     --maintenance-policy=TERMINATE \
     --boot-disk-size=200GB \
     --image-family=pytorch-2-4-cu124-ubuntu-2204 \
-    --image-project=deeplearning-platform-release
+    --image-project=deeplearning-platform-release \
+    --metadata-from-file startup-script=src/parse/startup-script.sh
 ```
 
-2. **Automated Scheduling**
+2. **Install Dependencies on the VM**
+NB: This part could be tricky to automate, as the VM is created with a custom image. Be sure to install the dependencies on the VM before running the startup script.
+```bash
+# Install system dependencies
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-venv
+
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Copy startup scripts
+sudo cp process_and_shutdown.sh /home/agomberto/
+sudo chmod +x /home/agomberto/process_and_shutdown.sh
+```
+
+3. **Automated Scheduling**
 ```bash
 # Create scheduler service account
 gcloud iam service-accounts create scheduler-vm-manager
@@ -172,7 +222,7 @@ chmod +x src/parse/check_and_start.sh
 
 The script uses a lock file to prevent concurrent executions and safely manages VM state.
 
-### Cost Optimization
+### 💰 Cost Optimization
 
 The deployment uses:
 - n1-highcpu-16 (~$0.424/hour)
@@ -181,7 +231,7 @@ The deployment uses:
 
 Scheduled stops ensure cost-effective usage by running only when needed.
 
-### Best Practices
+### 🤖 Best Practices
 
 Our testing revealed that the optimal configuration uses:
 - `gpt-4o-mini` for text post-processing

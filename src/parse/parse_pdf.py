@@ -53,7 +53,7 @@ async def main(
         return
 
     if n_samples:
-        pdf_files = [pdf for pdf in pdf_files[:+n_samples]]
+        pdf_files = [pdf for pdf in pdf_files[:n_samples]]
 
     # Setup converter function and client if needed
     client_texts, client_tables = setup_clients(settings)
