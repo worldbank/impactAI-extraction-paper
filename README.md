@@ -51,7 +51,7 @@
 
     Create a `.env` file at the root of the project and add the following environment variables
     - OPENAI_API_KEY
-	- GOOGLE_API_KEY
+	  - GOOGLE_API_KEY
 
     And activate the variables with:
 
@@ -69,7 +69,7 @@ The last suggestion is to also include annotations in a subfolder such as ```dat
 
 ## 📄 PDF to Markdown
 
-The `parse_pdf.py` script implements a robust PDF processing pipeline that converts academic papers into clean markdown format. This pipeline has been extensively tested against various approaches (Zerox, OCR on PDF images, PyMuPDF with and without LLM) and has proven to be the most effective solution.
+The `parse_pdf.py` script implements a robust PDF processing pipeline that converts academic papers into clean markdown format. This pipeline has been extensively tested against various approaches and leverages parallel processing for optimal performance.
 
 ### Usage
 
@@ -96,14 +96,14 @@ model_tables = "gpt-4o"     # For table processing
 ### Pipeline Steps
 
 1. **Document Loading**
-   - Scans input directory for PDF files
-   - Supports batch processing with configurable concurrency limits
-   - Handles nested directory structures
+   - Parallel scanning of input directory for PDF files
+   - Configurable concurrency limits for optimal resource usage
+   - Handles nested directory structures efficiently
 
-2. **Docling Ingestion**
-   - Converts PDFs using Docling's document processing pipeline
-   - Extracts text, tables, and structural elements
-   - Generates high-quality page images for table processing
+2. **Parallel Docling Ingestion**
+   - Concurrent PDF processing using Docling's pipeline
+   - Multi-threaded extraction of text, tables, and structural elements
+   - Parallel generation of high-quality page images for table processing
 
 3. **Content Separation**
    - Divides content into two streams:
@@ -126,6 +126,60 @@ model_tables = "gpt-4o"     # For table processing
    - Generates clean markdown files
    - Creates separate files for main text and tables
    - Saves processing metrics for analysis
+
+1. **VM Configuration**
+```bash
+# Create VM with T4 GPU
+gcloud compute instances create pdf-parser-vm \
+    --project=impactai-430615 \
+    --zone=us-central1-a \
+    --machine-type=n1-highcpu-8 \
+    --accelerator="type=nvidia-tesla-t4,count=1" \
+    --maintenance-policy=TERMINATE \
+    --boot-disk-size=200GB \
+    --image-family=pytorch-2-4-cu124-ubuntu-2204 \
+    --image-project=deeplearning-platform-release
+```
+
+2. **Automated Scheduling**
+```bash
+# Create scheduler service account
+gcloud iam service-accounts create scheduler-vm-manager
+
+# Grant VM management permissions
+gcloud projects add-iam-policy-binding impactai-430615 \
+    --member="serviceAccount:scheduler-vm-manager@impactai-430615.iam.gserviceaccount.com" \
+    --role="roles/compute.instanceAdmin.v1"
+
+# Create start job (every 3 hours)
+gcloud scheduler jobs create http start-parsing-vm-3hours \
+    --schedule="0 */3 * * *" \
+    --location=us-central1 \
+    --http-method=POST \
+    --uri="https://www.googleapis.com/compute/v1/projects/impactai-430615/zones/us-central1-a/instances/pdf-parser-vm/start" \
+    --oauth-service-account-email="scheduler-vm-manager@impactai-430615.iam.gserviceaccount.com"
+```
+
+3. **Manual Control Script**
+The `check_and_start.sh` script provides manual control over the VM:
+```bash
+# Make executable
+chmod +x src/parse/check_and_start.sh
+
+# Run script
+./src/parse/check_and_start.sh
+```
+
+The script uses a lock file to prevent concurrent executions and safely manages VM state.
+
+### Cost Optimization
+
+The deployment uses:
+- n1-highcpu-16 (~$0.424/hour)
+- T4 GPU (~$0.35/hour)
+- Total: ~$0.774/hour
+
+Scheduled stops ensure cost-effective usage by running only when needed.
 
 ### Best Practices
 
